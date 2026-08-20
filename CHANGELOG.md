@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+(none)
+
+## [0.1.1] — 2026-08-19 — first public release
+
 - `cmd/trig`: `link`, `unlink`, `status`, `sweep`, `flags` subcommands, git-tag-derived version,
   `Makefile`.
 - `internal/config`: personal-key loading, env var first, `~/.config/trig/config.json` fallback.
