@@ -5,6 +5,10 @@
 - `RenderConditions` shows release-condition property values in full instead of redacting
   non-`env` values to a count. Deliberate call: this project treats Linear access as implying
   PostHog access, so there's no narrower audience to hide a targeting identifier from.
+- The per-property condition breakdown now writes to the attachment's `subtitle` instead of
+  getting appended onto `title`. Verified live: Linear's Resources row renders both title and
+  subtitle (truncated, hover for the full text), but a long condition list made title itself
+  truncate unreadably; `metadata` alone is stored but never rendered anywhere in that row.
 
 ## [0.1.1] — 2026-08-19 — first public release
 

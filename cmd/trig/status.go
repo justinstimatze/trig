@@ -158,9 +158,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 		}
 
 		title := fmt.Sprintf("PostHog: %s [env=%s] — %s", flag.Key, envValue, titleSummary(summary, conditions))
-		if extra := posthog.TitleConditions(flag.Filters.Groups, envPropertyKey, envValue); extra != "" {
-			title += fmt.Sprintf(" (%s)", extra)
-		}
+		subtitle := posthog.TitleConditions(flag.Filters.Groups, envPropertyKey, envValue)
 		metadata := map[string]interface{}{
 			"flag_key":                 flag.Key,
 			"active":                   summary.Active,
@@ -200,6 +198,9 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 			}
 			if !jsonOut {
 				fmt.Printf("[dry-run] %s attachment: %q\n", action, title)
+				if subtitle != "" {
+					fmt.Printf("[dry-run] subtitle: %q\n", subtitle)
+				}
 				if switchedEnvFrom != "" {
 					fmt.Printf("[dry-run] would switch tracked env from %q to %q — the previous env's last-known state won't be kept\n", switchedEnvFrom, envValue)
 				}
@@ -209,7 +210,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 				fmt.Printf("switching tracked env from %q to %q — the previous env's last-known state won't be kept\n", switchedEnvFrom, envValue)
 			}
 			if existing != nil {
-				if _, err := lnClient.UpdateAttachment(existing.ID, title, metadata); err != nil {
+				if _, err := lnClient.UpdateAttachment(existing.ID, title, subtitle, metadata); err != nil {
 					return statusOutput{}, err
 				}
 				action = "updated"
@@ -217,7 +218,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 					fmt.Printf("updated attachment on %s\n", issue.Identifier)
 				}
 			} else {
-				if _, err := lnClient.CreateAttachment(issue.ID, title, flagURL, metadata); err != nil {
+				if _, err := lnClient.CreateAttachment(issue.ID, title, subtitle, flagURL, metadata); err != nil {
 					return statusOutput{}, err
 				}
 				action = "created"

@@ -43,14 +43,16 @@ busy ticket). Linear's `attachmentCreate` upserts on `(issueId, url)`, so there 
 attachment per flag, always reflecting whichever `--env` was checked most recently — switching
 `--env` replaces the previous environment's stored state, and trig reports that switch explicitly
 (a printed notice, and `switched_env_from` in `--json`) rather than doing it silently. The
-attachment's title carries the human-readable summary (e.g. `PostHog: agent-mode [env=preview] —
-100% rollout`) because Linear's issue-page Resources row renders only the title — not `subtitle`,
-not `metadata` — so anything meant to be seen without clicking through has to live there. The
-per-property condition breakdown (key, operator, and value — e.g. `tester exact justin`) only ever
-lands in the attachment's `metadata.conditions`, never the title itself, so it's stored and
-API-retrievable but not visible on the ticket page without querying Linear directly. Values are
-shown in full, unredacted: this project's convention is that Linear access implies PostHog access,
-so there's no narrower audience to hide a targeting identifier from.
+attachment's title carries the compact human-readable summary (e.g. `PostHog: agent-mode
+[env=preview] — 100% rollout`) — verified live in Linear's UI, not assumed: the Resources row
+renders `title` in full-weight text and `subtitle` inline right after it in muted grey on the same
+row, both truncated to fit the row's fixed height, both recoverable in full via a native hover
+tooltip. `metadata` alone isn't rendered anywhere in that row, tooltip included — it's stored and
+API-retrievable but only reachable by querying Linear directly. The per-property condition
+breakdown (key, operator, and value — e.g. `tester exact justin`) goes in `subtitle` so it's at
+least hover-visible on the ticket page, and is duplicated into `metadata.conditions` for `--json`
+consumers. Values are shown in full, unredacted: this project's convention is that Linear access
+implies PostHog access, so there's no narrower audience to hide a targeting identifier from.
 
 Two labels, both list/filter-visible in Linear:
 - `posthog-flag` (workspace-level, generic) — this ticket ships behind a flag.

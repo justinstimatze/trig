@@ -266,8 +266,8 @@ func (c *Client) RemoveLabel(issueID, labelID string) error {
 }
 
 const attachmentCreateMutation = `
-mutation($issueID: String!, $title: String!, $url: String!, $metadata: JSONObject) {
-  attachmentCreate(input: {issueId: $issueID, title: $title, url: $url, metadata: $metadata}) {
+mutation($issueID: String!, $title: String!, $subtitle: String, $url: String!, $metadata: JSONObject) {
+  attachmentCreate(input: {issueId: $issueID, title: $title, subtitle: $subtitle, url: $url, metadata: $metadata}) {
     success
     attachment { id title subtitle url metadata }
   }
@@ -280,9 +280,9 @@ mutation($issueID: String!, $title: String!, $url: String!, $metadata: JSONObjec
 // twice with the same issueID+url edits the same attachment in place (same
 // id) rather than creating a second one. There is no way to have two
 // independent attachments to the same URL on one issue.
-func (c *Client) CreateAttachment(issueID, title, url string, metadata map[string]interface{}) (*Attachment, error) {
+func (c *Client) CreateAttachment(issueID, title, subtitle, url string, metadata map[string]interface{}) (*Attachment, error) {
 	var resp attachmentCreateResponse
-	vars := map[string]interface{}{"issueID": issueID, "title": title, "url": url, "metadata": metadata}
+	vars := map[string]interface{}{"issueID": issueID, "title": title, "subtitle": subtitle, "url": url, "metadata": metadata}
 	if err := c.do(attachmentCreateMutation, vars, &resp); err != nil {
 		return nil, err
 	}
@@ -293,8 +293,8 @@ func (c *Client) CreateAttachment(issueID, title, url string, metadata map[strin
 }
 
 const attachmentUpdateMutation = `
-mutation($id: String!, $title: String!, $metadata: JSONObject) {
-  attachmentUpdate(id: $id, input: {title: $title, metadata: $metadata}) {
+mutation($id: String!, $title: String!, $subtitle: String, $metadata: JSONObject) {
+  attachmentUpdate(id: $id, input: {title: $title, subtitle: $subtitle, metadata: $metadata}) {
     success
     attachment { id title subtitle url metadata }
   }
@@ -302,9 +302,9 @@ mutation($id: String!, $title: String!, $metadata: JSONObject) {
 
 // UpdateAttachment edits an existing attachment in place — the create-or-
 // update path DESIGN.md calls for so re-runs don't accumulate duplicates.
-func (c *Client) UpdateAttachment(attachmentID, title string, metadata map[string]interface{}) (*Attachment, error) {
+func (c *Client) UpdateAttachment(attachmentID, title, subtitle string, metadata map[string]interface{}) (*Attachment, error) {
 	var resp attachmentUpdateResponse
-	vars := map[string]interface{}{"id": attachmentID, "title": title, "metadata": metadata}
+	vars := map[string]interface{}{"id": attachmentID, "title": title, "subtitle": subtitle, "metadata": metadata}
 	if err := c.do(attachmentUpdateMutation, vars, &resp); err != nil {
 		return nil, err
 	}
