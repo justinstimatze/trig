@@ -1,0 +1,41 @@
+version: 2
+
+builds:
+  - id: trig
+    main: ./cmd/trig
+    binary: trig
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    formats: ['tar.gz']
+    name_template: "trig_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+
+release:
+  github:
+    owner: justinstimatze
+    name: trig
+  draft: false
+  prerelease: auto
