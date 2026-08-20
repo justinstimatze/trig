@@ -86,6 +86,32 @@ func RenderConditions(groups []Group, envKey, envValue string) string {
 	return strings.Join(lines, "\n")
 }
 
+// TitleConditions renders a compact, one-line summary of each matched
+// group's non-env properties, for callers that need the condition detail
+// to survive somewhere Linear actually renders — the Resources row shows
+// only an attachment's title, never its metadata (see DESIGN.md). The env
+// property itself is omitted since callers already show it separately
+// (trig's title carries a "[env=...]" segment of its own). Empty when
+// every matched group's only property is env (e.g. a plain env=X gate with
+// nothing else to distinguish).
+func TitleConditions(groups []Group, envKey, envValue string) string {
+	matched := MatchGroups(groups, envKey, envValue)
+	var clauses []string
+	for _, g := range matched {
+		var parts []string
+		for _, p := range g.Properties {
+			if p.Key == envKey {
+				continue
+			}
+			parts = append(parts, renderProperty(p))
+		}
+		if len(parts) > 0 {
+			clauses = append(clauses, strings.Join(parts, " AND "))
+		}
+	}
+	return strings.Join(clauses, "; ")
+}
+
 // renderProperty describes one release-condition property as key, operator,
 // and value.
 func renderProperty(p Property) string {

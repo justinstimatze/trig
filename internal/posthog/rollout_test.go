@@ -130,6 +130,40 @@ func TestRenderConditions_ShowsScalarValueAndValuelessProperty(t *testing.T) {
 	}
 }
 
+func TestTitleConditions_MultipleGroupsJoinedCompactly(t *testing.T) {
+	groups := []Group{
+		{Properties: []Property{
+			{Key: "env", Operator: "exact", Value: "preview"},
+			{Key: "tester", Operator: "is_not_set"},
+		}},
+		{Properties: []Property{
+			{Key: "tester", Operator: "exact", Value: "justin"},
+			{Key: "env", Operator: "exact", Value: "preview"},
+		}},
+		{Properties: []Property{
+			{Key: "tester", Operator: "exact", Value: "dogfood"},
+			{Key: "env", Operator: "exact", Value: "preview"},
+		}},
+	}
+
+	got := TitleConditions(groups, "env", "preview")
+	want := "tester is_not_set; tester exact justin; tester exact dogfood"
+	if got != want {
+		t.Errorf("TitleConditions() = %q, want %q", got, want)
+	}
+}
+
+func TestTitleConditions_EmptyWhenOnlyEnvGates(t *testing.T) {
+	groups := []Group{
+		{Properties: []Property{{Key: "env", Operator: "exact", Value: "preview"}}},
+	}
+
+	got := TitleConditions(groups, "env", "preview")
+	if got != "" {
+		t.Errorf("TitleConditions() = %q, want empty", got)
+	}
+}
+
 func TestIsLiveIn(t *testing.T) {
 	cases := []struct {
 		name string

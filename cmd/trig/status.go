@@ -158,6 +158,9 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 		}
 
 		title := fmt.Sprintf("PostHog: %s [env=%s] — %s", flag.Key, envValue, titleSummary(summary, conditions))
+		if extra := posthog.TitleConditions(flag.Filters.Groups, envPropertyKey, envValue); extra != "" {
+			title += fmt.Sprintf(" (%s)", extra)
+		}
 		metadata := map[string]interface{}{
 			"flag_key":                 flag.Key,
 			"active":                   summary.Active,
