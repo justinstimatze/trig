@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"unicode/utf8"
 
 	"github.com/justinstimatze/trig/internal/config"
 )
@@ -94,7 +95,7 @@ func (c *Client) do(method, reqURL string, body interface{}, out interface{}) er
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		truncated := string(respBody[:min(len(respBody), 200)])
+		truncated := truncateUTF8(string(respBody), 200)
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return &AuthError{StatusCode: resp.StatusCode, Body: truncated}
 		}
@@ -107,6 +108,20 @@ func (c *Client) do(method, reqURL string, body interface{}, out interface{}) er
 		}
 	}
 	return nil
+}
+
+// truncateUTF8 cuts s to at most n bytes, backing off further if the cut
+// lands mid-rune — a plain byte slice can split a multi-byte UTF-8
+// character in half, leaving an invalid tail wherever the string is shown.
+func truncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 // GetFlagByKey looks up a feature flag by its exact string key. PostHog's

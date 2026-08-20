@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/justinstimatze/trig/internal/config"
 )
@@ -113,10 +114,10 @@ func (c *Client) do(query string, variables map[string]interface{}, out interfac
 	}
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return &AuthError{Messages: []string{fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))}}
+		return &AuthError{Messages: []string{fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncateUTF8(string(body), 200))}}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("linear API error %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))
+		return fmt.Errorf("linear API error %d: %s", resp.StatusCode, truncateUTF8(string(body), 200))
 	}
 
 	var envelope struct {
@@ -312,4 +313,18 @@ func (c *Client) UpdateAttachment(attachmentID, title, subtitle string, metadata
 		return nil, fmt.Errorf("attachmentUpdate reported failure for attachment %s", attachmentID)
 	}
 	return &resp.AttachmentUpdate.Attachment, nil
+}
+
+// truncateUTF8 cuts s to at most n bytes, backing off further if the cut
+// lands mid-rune — a plain byte slice can split a multi-byte UTF-8
+// character in half, leaving an invalid tail wherever the string is shown.
+func truncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
 }

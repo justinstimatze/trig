@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -108,5 +110,23 @@ func TestGetIssueByIdentifier_NullDataIsNotFound(t *testing.T) {
 	var notFound *NotFoundError
 	if !errors.As(err, &notFound) {
 		t.Fatalf("GetIssueByIdentifier() error = %v, want *NotFoundError", err)
+	}
+}
+
+func TestTruncateUTF8_DoesNotSplitAMultiByteRune(t *testing.T) {
+	// "世" is 3 bytes (E4 B8 96); 199 ASCII bytes + this rune straddles the
+	// 200-byte cutoff, so a plain byte slice would cut it in half.
+	s := strings.Repeat("a", 199) + "世" + strings.Repeat("b", 50)
+
+	got := truncateUTF8(s, 200)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateUTF8() produced invalid UTF-8: %q", got)
+	}
+	if len(got) > 200 {
+		t.Errorf("truncateUTF8() = %d bytes, want <= 200", len(got))
+	}
+	if got != strings.Repeat("a", 199) {
+		t.Errorf("truncateUTF8() = %q, want the split rune dropped entirely", got)
 	}
 }

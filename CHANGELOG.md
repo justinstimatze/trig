@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-(none)
+- Fixed a real (if unlikely) bug: error-message truncation in both HTTP clients sliced response
+  bodies at a raw byte offset, which could split a multi-byte UTF-8 character in half if one
+  landed on the 200-byte cutoff. `truncateUTF8` backs off to the nearest valid boundary instead.
 
 ## [0.1.2] — 2026-08-20
 

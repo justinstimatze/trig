@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -156,5 +157,29 @@ func TestSetTags_NilNormalizedToEmptyArray(t *testing.T) {
 	}
 	if body.Tags == nil {
 		t.Errorf("SetTags(id, nil) sent tags:null in the request body — PostHog's API rejects this")
+	}
+}
+
+func TestTruncateUTF8_DoesNotSplitAMultiByteRune(t *testing.T) {
+	// "世" is 3 bytes (E4 B8 96); 199 ASCII bytes + this rune straddles the
+	// 200-byte cutoff, so a plain byte slice would cut it in half.
+	s := strings.Repeat("a", 199) + "世" + strings.Repeat("b", 50)
+
+	got := truncateUTF8(s, 200)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateUTF8() produced invalid UTF-8: %q", got)
+	}
+	if len(got) > 200 {
+		t.Errorf("truncateUTF8() = %d bytes, want <= 200", len(got))
+	}
+	if got != strings.Repeat("a", 199) {
+		t.Errorf("truncateUTF8() = %q, want the split rune dropped entirely", got)
+	}
+}
+
+func TestTruncateUTF8_ShorterThanLimitUnchanged(t *testing.T) {
+	if got := truncateUTF8("short", 200); got != "short" {
+		t.Errorf("truncateUTF8() = %q, want unchanged", got)
 	}
 }
