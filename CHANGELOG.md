@@ -1,0 +1,19 @@
+# Changelog
+
+## Unreleased
+
+- `cmd/trig`: `link`, `unlink`, `status`, `sweep`, `flags` subcommands, git-tag-derived version,
+  `Makefile`.
+- `internal/config`: personal-key loading, env var first, `~/.config/trig/config.json` fallback.
+- `internal/posthog`: `GetFlagByKey`, `ListFlags`, `SetTags`, `Rollout()`, `RenderConditions`,
+  `IsLiveIn`, typed `AuthError`/`NotFoundError`.
+- `internal/linear`: issue/label/attachment read and write (`GetIssueByIdentifier`,
+  `GetLabelByName`, `CreateLabel`, `AddLabel`, `RemoveLabel`, `CreateAttachment`,
+  `UpdateAttachment`), typed `AuthError`/`NotFoundError`.
+- `trig status`: `--env`, `--json`, `--dry-run`. Writes the `posthog-flag` and
+  `posthog-live`/`posthog-dark` labels and a per-flag rollout-state attachment.
+- `trig sweep`: same report as `status`, run against every ticket with a linked flag instead of
+  one named on the command line. Per-ticket failures are logged and skipped; an unauthorized key
+  aborts the whole run immediately.
+- Distinct exit codes (2/3/4/5/6/1) via a shared `fail()` helper (`6` is sweep-only: partial
+  failure, at least one ticket failed).

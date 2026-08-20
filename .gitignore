@@ -1,0 +1,20 @@
+# binary
+/trig
+
+# test artifacts
+*.test
+*.out
+*.prof
+coverage.*
+
+# OS
+.DS_Store
+
+# local secrets — trig's real config lives outside the repo
+# (~/.config/trig/config.json), these are defensive only
+.env
+.env.local
+*.key
+
+# per-project Claude Code state
+/.claude/
