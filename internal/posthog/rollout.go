@@ -57,12 +57,11 @@ func MatchGroups(groups []Group, envKey, envValue string) []Group {
 }
 
 // RenderConditions renders, as plain text, every group MatchGroups finds
-// for envKey=envValue. Conditions are rendered by key/operator rather than
-// semantically interpreted — DESIGN.md is explicit that trig doesn't attempt
-// to label arbitrary property names across every team's convention. Property
-// *values* are redacted (see renderProperty) since this text is written into
-// Linear, whose audience can be broader than the PostHog project's own, and
-// release conditions are commonly targeted by email/user-id allowlists.
+// for envKey=envValue. Conditions are rendered by key/operator/value rather
+// than semantically interpreted — DESIGN.md is explicit that trig doesn't
+// attempt to label arbitrary property names across every team's convention.
+// Values are shown in full: Linear access implies PostHog access on these
+// projects, so there's no narrower audience to protect by hiding them.
 // Returns a message saying so when nothing matches (a true, useful answer,
 // not an error — a flag with no production-shaped group simply isn't in
 // production yet).
@@ -76,7 +75,7 @@ func RenderConditions(groups []Group, envKey, envValue string) string {
 	for _, g := range matched {
 		var parts []string
 		for _, p := range g.Properties {
-			parts = append(parts, renderProperty(p, envKey))
+			parts = append(parts, renderProperty(p))
 		}
 		pct := 100
 		if g.RolloutPercentage != nil {
@@ -87,41 +86,13 @@ func RenderConditions(groups []Group, envKey, envValue string) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderProperty describes one release-condition property without exposing
-// its targeting value. The envKey property is the one exception: its value
-// is an environment name (e.g. "production"), not an identifier, and is
-// already surfaced elsewhere (the attachment title's own "[env=...]"), so
-// it's safe and useful to show in full. Every other property shows only its
-// key, operator, and how many values it's matching against.
-func renderProperty(p Property, envKey string) string {
-	if p.Key == envKey {
-		if p.Value != nil {
-			return fmt.Sprintf("%s %s %v", p.Key, p.Operator, p.Value)
-		}
-		return fmt.Sprintf("%s %s", p.Key, p.Operator)
-	}
-	if n := valueCount(p.Value); n > 0 {
-		plural := "s"
-		if n == 1 {
-			plural = ""
-		}
-		return fmt.Sprintf("%s %s (%d value%s)", p.Key, p.Operator, n, plural)
+// renderProperty describes one release-condition property as key, operator,
+// and value.
+func renderProperty(p Property) string {
+	if p.Value != nil {
+		return fmt.Sprintf("%s %s %v", p.Key, p.Operator, p.Value)
 	}
 	return fmt.Sprintf("%s %s", p.Key, p.Operator)
-}
-
-// valueCount reports how many literal values p.Value holds — PostHog encodes
-// a multi-value condition (e.g. an "in" allowlist) as a JSON array, which
-// json.Unmarshal into interface{} always produces as []interface{}.
-func valueCount(v interface{}) int {
-	switch x := v.(type) {
-	case nil:
-		return 0
-	case []interface{}:
-		return len(x)
-	default:
-		return 1
-	}
 }
 
 // IsLiveIn reports whether this flag has any real effect for

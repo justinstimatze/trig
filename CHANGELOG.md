@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-(none)
+- `RenderConditions` shows release-condition property values in full instead of redacting
+  non-`env` values to a count. Deliberate call: this project treats Linear access as implying
+  PostHog access, so there's no narrower audience to hide a targeting identifier from.
 
 ## [0.1.1] — 2026-08-19 — first public release
 

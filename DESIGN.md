@@ -45,11 +45,12 @@ attachment per flag, always reflecting whichever `--env` was checked most recent
 (a printed notice, and `switched_env_from` in `--json`) rather than doing it silently. The
 attachment's title carries the human-readable summary (e.g. `PostHog: agent-mode [env=preview] —
 100% rollout`) because Linear's issue-page Resources row renders only the title — not `subtitle`,
-not `metadata` — so anything meant to be seen without clicking through has to live there. Release
-condition text (in the title's SUMMARY and in the attachment's `metadata.conditions`) shows each
-property's key and operator but never its literal value, since a targeting condition's value can be
-a real identifier (an email/user-id allowlist) and the Linear ticket's audience can be broader than
-the PostHog project's own.
+not `metadata` — so anything meant to be seen without clicking through has to live there. The
+per-property condition breakdown (key, operator, and value — e.g. `tester exact justin`) only ever
+lands in the attachment's `metadata.conditions`, never the title itself, so it's stored and
+API-retrievable but not visible on the ticket page without querying Linear directly. Values are
+shown in full, unredacted: this project's convention is that Linear access implies PostHog access,
+so there's no narrower audience to hide a targeting identifier from.
 
 Two labels, both list/filter-visible in Linear:
 - `posthog-flag` (workspace-level, generic) — this ticket ships behind a flag.

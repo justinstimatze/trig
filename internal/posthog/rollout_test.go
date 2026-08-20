@@ -1,7 +1,6 @@
 package posthog
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -94,7 +93,7 @@ func TestRenderConditions_NoMatch(t *testing.T) {
 	}
 }
 
-func TestRenderConditions_RedactsNonEnvValues(t *testing.T) {
+func TestRenderConditions_ShowsMultiValueProperty(t *testing.T) {
 	groups := []Group{
 		{
 			Properties: []Property{
@@ -106,19 +105,13 @@ func TestRenderConditions_RedactsNonEnvValues(t *testing.T) {
 	}
 
 	got := RenderConditions(groups, "env", "production")
-	want := "- env exact production AND email in (3 values) → 100% rollout"
+	want := "- env exact production AND email in [a@x.com b@x.com c@x.com] → 100% rollout"
 	if got != want {
 		t.Errorf("RenderConditions() = %q, want %q", got, want)
 	}
-
-	for _, leaked := range []string{"a@x.com", "b@x.com", "c@x.com"} {
-		if strings.Contains(got, leaked) {
-			t.Errorf("RenderConditions() leaked a targeting value %q into: %q", leaked, got)
-		}
-	}
 }
 
-func TestRenderConditions_ScalarValueRedactedTooAndValuelessPropertyShown(t *testing.T) {
+func TestRenderConditions_ShowsScalarValueAndValuelessProperty(t *testing.T) {
 	groups := []Group{
 		{
 			Properties: []Property{
@@ -131,12 +124,9 @@ func TestRenderConditions_ScalarValueRedactedTooAndValuelessPropertyShown(t *tes
 	}
 
 	got := RenderConditions(groups, "env", "production")
-	want := "- env exact production AND plan exact (1 value) AND $initial_referrer is_set → 50% rollout"
+	want := "- env exact production AND plan exact enterprise AND $initial_referrer is_set → 50% rollout"
 	if got != want {
 		t.Errorf("RenderConditions() = %q, want %q", got, want)
-	}
-	if strings.Contains(got, "enterprise") {
-		t.Errorf("RenderConditions() leaked a targeting value into: %q", got)
 	}
 }
 
