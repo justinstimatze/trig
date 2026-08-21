@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+(none)
+
+## [0.1.4] — 2026-08-21
+
 - `trig reconcile REGISTRY-FILE [--json]`: diffs a JSON flag-key registry against live PostHog
   flags and reports every entry with no matching flag (distinguishing never-created from
   deleted). Read-only, never creates — a missing flag still needs a human to pick its rollout
-  scope. New exit code `7` for "gap found."
+  scope. New exit code `7` for "gap found." Verified end to end against aipotluck.org's own
+  registry export, which caught a real live gap (a shipped flag key with no PostHog flag behind
+  it).
 
 ## [0.1.3] — 2026-08-20
 
