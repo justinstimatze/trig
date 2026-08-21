@@ -72,6 +72,8 @@ func main() {
 		cmdSweep(args[1:])
 	case "flags":
 		cmdFlags(args[1:])
+	case "reconcile":
+		cmdReconcile(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println("trig", buildVersion())
 	case "help", "--help", "-h":
@@ -100,6 +102,12 @@ Usage:
                                    each. Meant for a schedule, not by hand.
   trig flags [SEARCH]             List PostHog flags and their tags (read-only) —
                                    use this to find a FLAG-KEY for link/unlink.
+  trig reconcile FILE [--json]    Diff a JSON flag registry ([{"key","ticket"}],
+                                   FILE or "-" for stdin) against live PostHog
+                                   flags; reports every registry key with no
+                                   matching flag. Catches a flag key declared
+                                   and shipped in code that nobody created in
+                                   PostHog. Fails loud — never creates.
   trig version                    Print version.
 
 Each subcommand takes -h/--help for its full usage, flags, and exit codes.

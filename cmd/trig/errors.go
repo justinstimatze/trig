@@ -12,13 +12,14 @@ import (
 // Exit codes, distinct per failure class so a script or an agent can
 // branch on $? instead of string-matching stderr.
 const (
-	exitOK        = 0
-	exitError     = 1 // unexpected/unclassified failure
-	exitUsage     = 2 // bad arguments
-	exitNotLinked = 3 // trig status run before trig link
-	exitAuth      = 4 // API key unauthorized or missing a required scope
-	exitNotFound  = 5 // ticket, flag, or label doesn't exist
-	exitPartial   = 6 // trig sweep: at least one ticket failed, others may have succeeded
+	exitOK               = 0
+	exitError            = 1 // unexpected/unclassified failure
+	exitUsage            = 2 // bad arguments
+	exitNotLinked        = 3 // trig status run before trig link
+	exitAuth             = 4 // API key unauthorized or missing a required scope
+	exitNotFound         = 5 // ticket, flag, or label doesn't exist
+	exitPartial          = 6 // trig sweep: at least one ticket failed, others may have succeeded
+	exitReconcileMissing = 7 // trig reconcile: at least one registry key has no live PostHog flag
 )
 
 // fail prints a classified, actionable message for err and exits with the

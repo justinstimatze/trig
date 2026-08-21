@@ -66,12 +66,32 @@ Two labels, both list/filter-visible in Linear:
 the same report run against every ticket with a linked flag instead of one named on the command
 line — it discovers tickets by listing every `linear:*`-tagged flag rather than being told which
 to check, which is what makes it runnable unattended. `trig flags [SEARCH]` lists PostHog flags
-read-only. Every subcommand takes `-h`/`--help`. Exit codes are distinct per failure class (2 bad
-args, 3 not linked yet, 4 unauthorized/missing scope, 5 not found, 6 sweep partial failure, 1 other)
+read-only. `trig reconcile REGISTRY-FILE [--json]` covers the direction none of the above can see:
+a codebase's flag-key registry says a flag exists, PostHog says otherwise. Every subcommand takes
+`-h`/`--help`. Exit codes are distinct per failure class (2 bad args, 3 not linked yet, 4
+unauthorized/missing scope, 5 not found, 6 sweep partial failure, 7 reconcile found a gap, 1 other)
 so a script or an agent can branch on `$?` instead of parsing stderr text — backed by typed
 `AuthError`/`NotFoundError` in both API clients. Within `sweep`, one ticket failing doesn't stop
 the others — it's logged and skipped — but an `AuthError` aborts the whole run immediately, since
 it will fail identically for every remaining ticket.
+
+**Reconciliation** — `trig sweep` answers "is this flag's rollout visible on its ticket," which
+presupposes the flag exists. It says nothing about a flag key a codebase *declares* — in a registry
+file, a constants module, wherever a project centralizes its flag keys — that nobody ever actually
+created in PostHog. That gap shipped twice in one consuming project's history before either was
+noticed, both times because nothing in `lint`/`test`/`build` talks to PostHog at all; the only way
+to catch it was running `trig flags <key>` by hand. `trig reconcile` takes a JSON array of
+`{"key","ticket"}` (a file, or `-` for stdin) and reports every entry with no live PostHog flag —
+distinguishing "never created" from "existed once, now deleted," since those call for different
+fixes. It's read-only on both sides: no PostHog write, no Linear write. Deliberately not
+auto-create-on-gap — a human still has to pick the flag's rollout scope (env condition, tester
+group, which plane reads it), and guessing that risks repeating exactly the by-hand mistake this
+command exists to catch. The registry format is JSON rather than trig parsing a consuming project's
+source directly (e.g. grepping a TypeScript file) — regex/AST-scraping another language's source is
+fragile and this project's own convention (see the root `CLAUDE.md`) is against exactly that
+pattern for audits; a project wanting `reconcile` in CI adds a small export step that dumps its
+registry as JSON, which is also the only shape that works regardless of what language declares the
+registry.
 
 **Trigger model** — on-demand only for v1, matching every other tool in this ecosystem (hindcast,
 plancheck, buddy, defn — all invoked, none hosted). Needs zero hosting. `trig sweep` is the

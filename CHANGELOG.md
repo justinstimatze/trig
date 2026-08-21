@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-(none)
+- `trig reconcile REGISTRY-FILE [--json]`: diffs a JSON flag-key registry against live PostHog
+  flags and reports every entry with no matching flag (distinguishing never-created from
+  deleted). Read-only, never creates — a missing flag still needs a human to pick its rollout
+  scope. New exit code `7` for "gap found."
 
 ## [0.1.3] — 2026-08-20
 

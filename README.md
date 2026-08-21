@@ -28,3 +28,8 @@ write without making one, and `--json` for when you want the exit code, not the 
 no ticket argument, it finds them all from PostHog's own tag data. Built to run unattended on a
 schedule; see `DESIGN.md`'s "Trigger model" section for the credential and workflow file it still
 needs before that's actually wired up anywhere.
+
+`trig reconcile FILE [--json]` catches the other direction of the same lie: a flag key declared in
+application code, shipped, tests green, that nobody ever actually created in PostHog. Feed it a
+JSON array of `{"key","ticket"}` — a file path or `-` for stdin — and it names every entry with no
+live match. It never creates the missing flag; picking rollout scope is a person's call.
