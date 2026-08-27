@@ -95,7 +95,7 @@ Usage:
   trig status CUR-198 [--env V]   Find the flag(s) tagged linear:CUR-198, render
                                    rollout state for env V (default "production"),
                                    write it to the ticket: the "posthog-flag" label,
-                                   a "posthog-live"/"posthog-dark" state label, and a
+                                   a "posthog-V:{dark,custom,live}" state label, and a
                                    create-or-update attachment per flag.
   trig sweep [--env V]             Find every ticket with a linked flag on its
                                    own (no ticket named) and run status for

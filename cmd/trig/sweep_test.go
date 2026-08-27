@@ -77,3 +77,35 @@ func TestParseSweepArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestVoidWarning(t *testing.T) {
+	cases := []struct {
+		name   string
+		states []posthog.RolloutState
+		want   string
+	}{
+		{name: "no tickets checked, no warning", states: nil, want: ""},
+		{
+			name:   "one live ticket among dark ones, no warning",
+			states: []posthog.RolloutState{posthog.StateDark, posthog.StateLive, posthog.StateDark},
+			want:   "",
+		},
+		{
+			name:   "one custom ticket among dark ones, no warning",
+			states: []posthog.RolloutState{posthog.StateDark, posthog.StateCustom},
+			want:   "",
+		},
+		{
+			name:   "every ticket dark, warns",
+			states: []posthog.RolloutState{posthog.StateDark, posthog.StateDark, posthog.StateDark},
+			want:   "sweeping into a void: all 3 tracked ticket(s) are dark in env=preview — double check this is the environment you meant to track",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := voidWarning(tc.states, "preview"); got != tc.want {
+				t.Errorf("voidWarning(%v, %q) = %q, want %q", tc.states, "preview", got, tc.want)
+			}
+		})
+	}
+}

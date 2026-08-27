@@ -54,12 +54,39 @@ least hover-visible on the ticket page, and is duplicated into `metadata.conditi
 consumers. Values are shown in full, unredacted: this project's convention is that Linear access
 implies PostHog access, so there's no narrower audience to hide a targeting identifier from.
 
-Two labels, both list/filter-visible in Linear:
+Labels, all list/filter-visible in Linear:
 - `posthog-flag` (workspace-level, generic) — this ticket ships behind a flag.
-- `posthog-live` / `posthog-dark` (ticket-wide, swapped, never both at once) — whether any linked flag has
-  a non-zero-rollout condition for the tracked environment. Computed once across every matched flag
-  per run, not per-flag, so two flags in different states on one ticket can't fight over the label
-  within a single run.
+- `posthog-VALUE:dark` / `:custom` / `:live` (ticket-wide, one per environment ever checked,
+  namespaced by that environment's own `--env` value — never more than one state per environment at
+  once). `dark` means no matched flag has any effect there; `live` means at least one matched flag
+  targets everyone unconditionally at 100%; `custom` is everything in between — a percentage under
+  100, or a group gated by another property alongside the environment one. Computed once across
+  every matched flag per run, not per-flag, so two flags in different states on one ticket can't
+  fight over the label within a single run — and namespaced by environment so two different `--env`
+  runs can't fight over each other's label either, which an earlier, unqualified `posthog-live` /
+  `posthog-dark` pair did (see "Environment-qualified labels" below). Every run also removes that
+  legacy pair unconditionally, so a ticket it once mislabeled self-heals on its next real run.
+
+**Environment-qualified labels** — the unqualified `posthog-live`/`posthog-dark` pair this replaced
+was correct per its own contract but misleading in practice: a consuming project's unattended
+`trig sweep --env preview` cron (real, running every 20 minutes since 2026-08-20, discovered
+auditing a live Linear board rather than assumed) wrote the same bare `posthog-live` label a
+production sweep would, and it reads to a board-scanning human as "live for users" regardless of
+which environment actually produced it — 16 tickets carried it despite none having any
+production-scoped rollout. Considered and rejected: gating the write to a single privileged env
+(e.g. only `production` may touch the label) — that would have silently frozen the preview cron's
+labels with no signal anything had changed, the same "check that cannot go red" shape one layer
+down. Considered and rejected: copying LaunchDarkly's own per-environment flag-status taxonomy
+(`new`/`active`/`launched`/`inactive`, confirmed against LaunchDarkly's docs) — that's a staleness
+axis (is this flag still being evaluated), a different question from rollout shape, and would
+require per-environment evaluation-request volume PostHog doesn't expose (PostHog's own
+`last_called_at` and `active=STALE` filter, confirmed against its API reference, track staleness
+per-flag, not per-environment-condition, since PostHog has no first-class per-environment object
+the way LaunchDarkly does — "environment" here is always a property condition on one flag, per
+"Linking" above). `dark`/`custom`/`live` stays on the rollout-shape question this tool exists to
+answer, computed only from `RolloutSummary`/`StateIn`'s existing literal reading of a flag's
+release conditions — no new interpretation, no new PostHog surface, just a label that finally
+names which environment it's talking about.
 
 **CLI** — `trig link TICKET-ID FLAG-KEY` / `trig unlink` manage the tag. `trig status TICKET-ID
 [--env V] [--json] [--dry-run]` is the main command. `trig sweep [--env V] [--json] [--dry-run]` is

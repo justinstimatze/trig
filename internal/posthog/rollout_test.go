@@ -220,3 +220,97 @@ func TestIsLiveIn(t *testing.T) {
 		})
 	}
 }
+
+func TestStateIn(t *testing.T) {
+	cases := []struct {
+		name string
+		flag FeatureFlag
+		want RolloutState
+	}{
+		{
+			name: "inactive flag is dark regardless of groups",
+			flag: FeatureFlag{
+				Active: false,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: intPtr(100)},
+				}},
+			},
+			want: StateDark,
+		},
+		{
+			name: "no matching group for this env is dark",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "preview"}}, RolloutPercentage: intPtr(100)},
+				}},
+			},
+			want: StateDark,
+		},
+		{
+			name: "matching group, zero rollout is dark",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: intPtr(0)},
+				}},
+			},
+			want: StateDark,
+		},
+		{
+			name: "matching group, 100% and only the env property, is live",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: nil},
+				}},
+			},
+			want: StateLive,
+		},
+		{
+			name: "matching group, 100% but gated by another property, is custom",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{
+						Properties: []Property{
+							{Key: "env", Operator: "exact", Value: "production"},
+							{Key: "tester", Operator: "exact", Value: "justin"},
+						},
+						RolloutPercentage: intPtr(100),
+					},
+				}},
+			},
+			want: StateCustom,
+		},
+		{
+			name: "matching group, partial percentage, is custom",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: intPtr(25)},
+				}},
+			},
+			want: StateCustom,
+		},
+		{
+			name: "one dark group and one fully live group for the env is live",
+			flag: FeatureFlag{
+				Active: true,
+				Filters: Filters{Groups: []Group{
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: intPtr(0)},
+					{Properties: []Property{{Key: "env", Operator: "exact", Value: "production"}}, RolloutPercentage: nil},
+				}},
+			},
+			want: StateLive,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.flag.StateIn("env", "production"); got != tc.want {
+				t.Errorf("StateIn() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

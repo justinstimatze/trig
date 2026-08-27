@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-(none)
+- Ticket-wide rollout label is now environment-qualified and 3-state:
+  `posthog-VALUE:dark`/`:custom`/`:live` replaces the unqualified `posthog-live`/`posthog-dark`
+  pair, which a real preview-only cron (discovered auditing a live Linear board) was writing onto
+  16 tickets with no production rollout at all — indistinguishable on the board from an actual
+  production sweep. Every run also removes the legacy pair, so a ticket it once mislabeled
+  self-heals on its next real run. `trig sweep` additionally warns (`void_warning` in `--json`)
+  when every checked ticket comes back dark in the tracked env — the signature of sweeping the
+  wrong environment, which is exactly what the preview-only cron would have surfaced immediately
+  had this existed already. Verified live: `trig sweep --env production --dry-run` against the
+  same real registry that motivated this correctly flagged all 16 tickets as dark.
 
 ## [0.1.4] — 2026-08-21
 

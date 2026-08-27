@@ -123,9 +123,8 @@ func renderProperty(p Property) string {
 
 // IsLiveIn reports whether this flag has any real effect for
 // envKey=envValue: active, and at least one matching group with non-zero
-// rollout. Used to pick trig's posthog-live/posthog-dark Linear label — a
-// generic, structurally-computable signal, not an attempt to interpret
-// team-specific property semantics.
+// rollout. A generic, structurally-computable signal, not an attempt to
+// interpret team-specific property semantics.
 func (f FeatureFlag) IsLiveIn(envKey, envValue string) bool {
 	if !f.Active {
 		return false
@@ -140,4 +139,45 @@ func (f FeatureFlag) IsLiveIn(envKey, envValue string) bool {
 		}
 	}
 	return false
+}
+
+// RolloutState is a flag's rollout shape within one specific environment:
+// Dark (no effect there at all), Custom (live to a subset — a percentage
+// under 100, or a group gated by another property alongside the env one),
+// or Live (a matching group targets everyone in that environment
+// unconditionally, at 100%). Unlike RolloutSummary, which is computed
+// across every group regardless of environment, this only looks at groups
+// MatchGroups finds for envKey=envValue — the two can disagree, e.g. a flag
+// fully rolled out in production but gated by a tester property in preview.
+type RolloutState string
+
+const (
+	StateDark   RolloutState = "dark"
+	StateCustom RolloutState = "custom"
+	StateLive   RolloutState = "live"
+)
+
+// StateIn classifies this flag's rollout shape for envKey=envValue. Used to
+// pick trig's per-environment Linear label.
+func (f FeatureFlag) StateIn(envKey, envValue string) RolloutState {
+	if !f.Active {
+		return StateDark
+	}
+	live := false
+	for _, g := range MatchGroups(f.Filters.Groups, envKey, envValue) {
+		pct := 100
+		if g.RolloutPercentage != nil {
+			pct = *g.RolloutPercentage
+		}
+		if pct == 100 && len(g.Properties) == 1 {
+			return StateLive
+		}
+		if pct > 0 {
+			live = true
+		}
+	}
+	if live {
+		return StateCustom
+	}
+	return StateDark
 }

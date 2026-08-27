@@ -93,3 +93,40 @@ func TestParseStatusArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestStateLabel(t *testing.T) {
+	cases := []struct {
+		env   string
+		state posthog.RolloutState
+		want  string
+	}{
+		{env: "preview", state: posthog.StateCustom, want: "posthog-preview:custom"},
+		{env: "production", state: posthog.StateLive, want: "posthog-production:live"},
+		{env: "staging", state: posthog.StateDark, want: "posthog-staging:dark"},
+	}
+	for _, tc := range cases {
+		if got := stateLabel(tc.env, tc.state); got != tc.want {
+			t.Errorf("stateLabel(%q, %q) = %q, want %q", tc.env, tc.state, got, tc.want)
+		}
+	}
+}
+
+func TestAggregateState(t *testing.T) {
+	cases := []struct {
+		name   string
+		states []posthog.RolloutState
+		want   posthog.RolloutState
+	}{
+		{name: "empty is dark", states: nil, want: posthog.StateDark},
+		{name: "all dark is dark", states: []posthog.RolloutState{posthog.StateDark, posthog.StateDark}, want: posthog.StateDark},
+		{name: "any custom beats dark", states: []posthog.RolloutState{posthog.StateDark, posthog.StateCustom}, want: posthog.StateCustom},
+		{name: "any live beats custom and dark", states: []posthog.RolloutState{posthog.StateCustom, posthog.StateLive, posthog.StateDark}, want: posthog.StateLive},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := aggregateState(tc.states); got != tc.want {
+				t.Errorf("aggregateState(%v) = %q, want %q", tc.states, got, tc.want)
+			}
+		})
+	}
+}

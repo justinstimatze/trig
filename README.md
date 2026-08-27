@@ -19,15 +19,20 @@ $ trig status CUR-198
 
 `trig link` remembers which flag belongs to which ticket. `trig status` checks PostHog's current
 rollout state for that flag and writes it onto the ticket as a Linear attachment — safe to re-run,
-it edits the same attachment in place instead of piling up duplicates. `trig flags [SEARCH]` lists
-PostHog flags read-only, for finding the key you want, and `trig unlink` forgets a pairing. Every
-subcommand takes `-h` for its full usage and exit codes; `status` adds `--dry-run` to preview a
-write without making one, and `--json` for when you want the exit code, not the sentence.
+it edits the same attachment in place instead of piling up duplicates. It also writes one
+ticket-wide label per environment checked — `posthog-VALUE:dark` / `:custom` / `:live` — so
+`--env preview` and `--env production` each own their own honest label instead of fighting over a
+single unqualified one. `trig flags [SEARCH]` lists PostHog flags read-only, for finding the key
+you want, and `trig unlink` forgets a pairing. Every subcommand takes `-h` for its full usage and
+exit codes; `status` adds `--dry-run` to preview a write without making one, and `--json` for when
+you want the exit code, not the sentence.
 
 `trig sweep [--env V] [--json] [--dry-run]` is `status` run against every linked ticket at once —
-no ticket argument, it finds them all from PostHog's own tag data. Built to run unattended on a
-schedule; see `DESIGN.md`'s "Trigger model" section for the credential and workflow file it still
-needs before that's actually wired up anywhere.
+no ticket argument, it finds them all from PostHog's own tag data. If every ticket it checks comes
+back dark in the tracked env, it says so instead of staying quiet — the signature of a cron pinned
+to the wrong environment, not of nothing having shipped. Meant to run unattended on a schedule; see
+`DESIGN.md`'s "Trigger model" section for the credential and workflow file that lives in the
+consuming project's own repo.
 
 `trig reconcile FILE [--json]` catches the other direction of the same lie: a flag key declared in
 application code, shipped, tests green, that nobody ever actually created in PostHog. Feed it a

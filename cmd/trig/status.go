@@ -13,29 +13,69 @@ import (
 )
 
 const (
-	flaggedLabel   = "posthog-flag"
-	liveLabel      = "posthog-live"
-	darkLabel      = "posthog-dark"
-	envPropertyKey = "env"
+	flaggedLabel = "posthog-flag"
+	// legacyLiveLabel and legacyDarkLabel are the pre-namespaced pair every
+	// run superseded — a single "posthog-live"/"posthog-dark" swap with no
+	// indication of which --env produced it, which read as "live for users"
+	// regardless of whether the checked env was actually production. Every
+	// run unconditionally removes both (see runTicket) so a ticket a
+	// preview-only sweep once mislabeled self-heals on its next real run,
+	// without a separate migration step.
+	legacyLiveLabel = "posthog-live"
+	legacyDarkLabel = "posthog-dark"
+	envPropertyKey  = "env"
 )
+
+// stateLabel names the Linear label for one environment's rollout state,
+// e.g. "posthog-preview:custom". Namespacing by envValue means two --env
+// values never fight over the same label, and a label's name alone tells a
+// board-scanning human which environment it's actually claiming something
+// about — the gap that motivated this over a single unqualified pair.
+func stateLabel(envValue string, state posthog.RolloutState) string {
+	return fmt.Sprintf("posthog-%s:%s", envValue, state)
+}
+
+// aggregateState picks one ticket-wide rollout state across every matched
+// flag for the tracked environment: live if any flag is live there, else
+// custom if any flag is custom, else dark. The most-informative-flag-wins
+// rule mirrors the pre-namespaced label's any-live-wins semantics,
+// generalized from 2 states to 3.
+func aggregateState(states []posthog.RolloutState) posthog.RolloutState {
+	best := posthog.StateDark
+	for _, s := range states {
+		if s == posthog.StateLive {
+			return posthog.StateLive
+		}
+		if s == posthog.StateCustom {
+			best = posthog.StateCustom
+		}
+	}
+	return best
+}
 
 const statusUsage = `usage: trig status TICKET-ID [--env VALUE] [--json] [--dry-run]
 
 Finds every PostHog flag tagged linear:TICKET-ID, renders its rollout state
 for the tracked environment (default "production"), and writes it to the
-Linear ticket: the generic "posthog-flag" label (always), one of "posthog-live" /
-"posthog-dark" reflecting whether any matched flag is live in that environment
-(ticket-wide — swapped, never both at once), and one create-or-update
-attachment per flag titled "PostHog: FLAG [env=VALUE] — SUMMARY". Linear's own
-attachmentCreate upserts by (issue, URL), so there is exactly one trig
-attachment per flag — only the most recently checked environment's state is
-kept. Running with a different --env than last time REPLACES the previous
-env's record; trig prints this switch explicitly (and reports it in --json
-as switched_env_from) rather than doing it silently.
+Linear ticket: the generic "posthog-flag" label (always), one of
+"posthog-VALUE:dark" / "posthog-VALUE:custom" / "posthog-VALUE:live"
+(ticket-wide, namespaced by the checked --env — exactly one of the three,
+never more than one at once) reflecting whether any matched flag has no
+effect, a partial/conditional effect, or an unconditional 100% effect in
+that environment, and one create-or-update attachment per flag titled
+"PostHog: FLAG [env=VALUE] — SUMMARY". Linear's own attachmentCreate upserts
+by (issue, URL), so there is exactly one trig attachment per flag — only the
+most recently checked environment's state is kept there. Running with a
+different --env than last time REPLACES the previous env's attachment
+record; trig prints this switch explicitly (and reports it in --json as
+switched_env_from) rather than doing it silently. The ticket-wide label is
+unaffected by that switch — each --env owns its own label, so checking
+preview today and production tomorrow leaves both labels intact and honest.
 
-  --env VALUE   Which environment's release conditions to render and use
-                for the posthog-live/posthog-dark label. Matched against each
-                release condition group's "env" property. Default: production.
+  --env VALUE   Which environment's release conditions to render and use for
+                the ticket-wide posthog-VALUE:{dark,custom,live} label.
+                Matched against each release condition group's "env"
+                property. Default: production.
   --json        Print one JSON document to stdout instead of prose. Errors
                 still go to stderr as text regardless of this flag.
   --dry-run     Print what would be written; make no Linear writes at all
@@ -53,6 +93,7 @@ type flagResult struct {
 	MaxRolloutPercentage   int    `json:"max_rollout_percentage"`
 	Conditions             string `json:"conditions"`
 	IsLive                 bool   `json:"is_live"`
+	RolloutState           string `json:"rollout_state"`               // dark | custom | live, for this flag alone in the tracked env
 	AttachmentAction       string `json:"attachment_action"`           // created | updated | would_create | would_update
 	SwitchedEnvFrom        string `json:"switched_env_from,omitempty"` // set when this run replaced a different env's last-known state
 }
@@ -61,7 +102,8 @@ type statusOutput struct {
 	Ticket     string       `json:"ticket"`
 	Env        string       `json:"env"`
 	DryRun     bool         `json:"dry_run"`
-	StateLabel string       `json:"state_label"`
+	State      string       `json:"state"`       // dark | custom | live, aggregated across every matched flag
+	StateLabel string       `json:"state_label"` // e.g. "posthog-preview:custom" — the Linear label State maps to
 	CheckedAt  string       `json:"checked_at"`
 	Flags      []flagResult `json:"flags"`
 }
@@ -117,11 +159,11 @@ func cmdStatus(args []string) {
 // runTicket applies trig's status logic for one ticket against an
 // already-discovered set of matched flags: resolves the Linear issue,
 // ensures the "posthog-flag" label, creates or updates one attachment per
-// flag, and sets the ticket-wide posthog-live/posthog-dark label from
-// whether any flag is live. Shared by cmdStatus (one ticket named on the
-// command line) and cmdSweep (every ticket discovered from PostHog tags) —
-// callers own error handling, since a failure aborts cmdStatus but should
-// only skip one ticket in cmdSweep.
+// flag, and sets the ticket-wide posthog-VALUE:{dark,custom,live} label
+// from the aggregate rollout state across every matched flag. Shared by
+// cmdStatus (one ticket named on the command line) and cmdSweep (every
+// ticket discovered from PostHog tags) — callers own error handling, since
+// a failure aborts cmdStatus but should only skip one ticket in cmdSweep.
 func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID string, matched []posthog.FeatureFlag, envValue string, dryRun, jsonOut bool, checkedAt string) (statusOutput, error) {
 	issue, err := lnClient.GetIssueByIdentifier(ticketID)
 	if err != nil {
@@ -139,21 +181,20 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 	}
 
 	results := []flagResult{}
-	anyLive := false
+	var states []posthog.RolloutState
 	for i, flag := range matched {
 		summary := flag.Rollout()
 		conditions := posthog.RenderConditions(flag.Filters.Groups, envPropertyKey, envValue)
 		isLive := flag.IsLiveIn(envPropertyKey, envValue)
-		if isLive {
-			anyLive = true
-		}
+		state := flag.StateIn(envPropertyKey, envValue)
+		states = append(states, state)
 
 		if !jsonOut {
 			if i > 0 {
 				fmt.Println("---")
 			}
-			fmt.Printf("%s: active=%v effectively_full_rollout=%v max_rollout_percentage=%d%% live_in_%s=%v\n",
-				flag.Key, summary.Active, summary.EffectivelyFullRollout, summary.MaxRolloutPercentage, envValue, isLive)
+			fmt.Printf("%s: active=%v effectively_full_rollout=%v max_rollout_percentage=%d%% live_in_%s=%v state_in_%s=%s\n",
+				flag.Key, summary.Active, summary.EffectivelyFullRollout, summary.MaxRolloutPercentage, envValue, isLive, envValue, state)
 			fmt.Println(conditions)
 		}
 
@@ -166,6 +207,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 			"max_rollout_percentage":   summary.MaxRolloutPercentage,
 			"tracked_env":              envValue,
 			"is_live":                  isLive,
+			"rollout_state":            string(state),
 			"conditions":               conditions,
 			"checked_at":               checkedAt,
 		}
@@ -235,6 +277,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 			MaxRolloutPercentage:   summary.MaxRolloutPercentage,
 			Conditions:             conditions,
 			IsLive:                 isLive,
+			RolloutState:           string(state),
 			AttachmentAction:       action,
 			SwitchedEnvFrom:        switchedEnvFrom,
 		})
@@ -242,21 +285,33 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 
 	// Ticket-wide state label, computed once across all matched flags (not
 	// per-flag) so two flags in different states on the same ticket can't
-	// thrash each other's label on and off within a single run.
-	wantLabel, otherLabel := darkLabel, liveLabel
-	if anyLive {
-		wantLabel, otherLabel = liveLabel, darkLabel
+	// thrash each other's label on and off within a single run. Namespaced
+	// by envValue so two --env values each own their own label instead of
+	// fighting over one unqualified pair.
+	ticketState := aggregateState(states)
+	wantLabel := stateLabel(envValue, ticketState)
+	var otherLabels []string
+	for _, s := range []posthog.RolloutState{posthog.StateDark, posthog.StateCustom, posthog.StateLive} {
+		if s != ticketState {
+			otherLabels = append(otherLabels, stateLabel(envValue, s))
+		}
 	}
+	// The pre-namespaced pair is fully superseded and cleaned up on every
+	// run regardless of ticketState — see legacyLiveLabel's doc comment.
+	otherLabels = append(otherLabels, legacyLiveLabel, legacyDarkLabel)
+
 	if dryRun {
 		if !jsonOut {
-			fmt.Printf("[dry-run] would ensure label %q applied, %q removed\n", wantLabel, otherLabel)
+			fmt.Printf("[dry-run] would ensure label %q applied, %v removed\n", wantLabel, otherLabels)
 		}
 	} else {
 		if err := ensureLabelApplied(lnClient, issue, wantLabel); err != nil {
 			return statusOutput{}, err
 		}
-		if err := ensureLabelRemoved(lnClient, issue, otherLabel); err != nil {
-			return statusOutput{}, err
+		for _, l := range otherLabels {
+			if err := ensureLabelRemoved(lnClient, issue, l); err != nil {
+				return statusOutput{}, err
+			}
 		}
 	}
 
@@ -264,6 +319,7 @@ func runTicket(phClient *posthog.Client, lnClient *linear.Client, ticketID strin
 		Ticket:     issue.Identifier,
 		Env:        envValue,
 		DryRun:     dryRun,
+		State:      string(ticketState),
 		StateLabel: wantLabel,
 		CheckedAt:  checkedAt,
 		Flags:      results,

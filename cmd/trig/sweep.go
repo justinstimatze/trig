@@ -19,15 +19,23 @@ const sweepUsage = `usage: trig sweep [--env VALUE] [--json] [--dry-run]
 Finds every PostHog flag tagged linear:TICKET-ID — for any ticket, not one
 named on the command line — groups them by ticket, and runs the same report
 'trig status' does for each one: rollout state for the tracked environment
-(default "production"), the "posthog-flag" label, one of "posthog-live" /
-"posthog-dark", and one create-or-update attachment per flag. Meant to run
-unattended on a schedule (e.g. a GitHub Actions cron), not by hand.
+(default "production"), the "posthog-flag" label, one of
+"posthog-VALUE:dark" / "posthog-VALUE:custom" / "posthog-VALUE:live", and
+one create-or-update attachment per flag. Meant to run unattended on a
+schedule (e.g. a GitHub Actions cron), not by hand.
 
 Tickets are processed independently: one ticket failing (an archived issue,
 a deleted label) is logged and skipped, it doesn't stop the rest. An
 unauthorized/missing-scope API key is treated as systemic instead — it will
 fail identically for every remaining ticket, so trig aborts the whole sweep
 on the first one rather than repeating the same failure N times.
+
+If every successfully-checked ticket comes back dark in the tracked env,
+sweep prints a warning (and sets void_warning in --json) instead of staying
+quiet: a real flag registry that's uniformly dark in the env you're checking
+is the signature of tracking the wrong environment, not of nothing having
+shipped yet — this is the check that would have caught a cron pinned to
+--env preview well before anyone happened to notice by hand.
 
   --env VALUE   Same as trig status --env. Default: production.
   --json        Print one JSON document (a list of per-ticket reports) to
@@ -46,10 +54,28 @@ type sweepTicketResult struct {
 }
 
 type sweepOutput struct {
-	Env       string              `json:"env"`
-	DryRun    bool                `json:"dry_run"`
-	CheckedAt string              `json:"checked_at"`
-	Tickets   []sweepTicketResult `json:"tickets"`
+	Env         string              `json:"env"`
+	DryRun      bool                `json:"dry_run"`
+	CheckedAt   string              `json:"checked_at"`
+	Tickets     []sweepTicketResult `json:"tickets"`
+	VoidWarning string              `json:"void_warning,omitempty"`
+}
+
+// voidWarning reports when every one of states (the ticket-wide state from
+// each successfully-checked ticket, in the same order sweep processed them)
+// is dark. A pure, testable aggregation over data cmdSweep already
+// computes — no interpretation of what the tracked env is "supposed to" be,
+// just the structural fact that nothing sweep found is live there.
+func voidWarning(states []posthog.RolloutState, envValue string) string {
+	if len(states) == 0 {
+		return ""
+	}
+	for _, s := range states {
+		if s != posthog.StateDark {
+			return ""
+		}
+	}
+	return fmt.Sprintf("sweeping into a void: all %d tracked ticket(s) are dark in env=%s — double check this is the environment you meant to track", len(states), envValue)
 }
 
 // cmdSweep is trig's discovery-driven counterpart to cmdStatus: instead of
@@ -79,6 +105,7 @@ func cmdSweep(args []string) {
 
 	checkedAt := time.Now().UTC().Format(time.RFC3339)
 	results := []sweepTicketResult{}
+	var states []posthog.RolloutState
 	failedCount := 0
 
 	if !jsonOut && len(ticketIDs) == 0 {
@@ -106,12 +133,19 @@ func cmdSweep(args []string) {
 			continue
 		}
 		results = append(results, sweepTicketResult{statusOutput: out})
+		states = append(states, posthog.RolloutState(out.State))
+	}
+
+	warning := voidWarning(states, envValue)
+	if warning != "" && !jsonOut {
+		fmt.Println("===")
+		fmt.Println(warning)
 	}
 
 	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		out := sweepOutput{Env: envValue, DryRun: dryRun, CheckedAt: checkedAt, Tickets: results}
+		out := sweepOutput{Env: envValue, DryRun: dryRun, CheckedAt: checkedAt, Tickets: results, VoidWarning: warning}
 		if err := enc.Encode(out); err != nil {
 			fail("sweep", err)
 		}
