@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+(none)
+
+## [0.1.6] — 2026-08-27
+
 - `trig sweep` gains a second, independent responsibility: every Linear ticket at state "Merged"
   gets checked against the Linear Release API, and once its code has actually reached a completed
   release, gets moved to "Dark"/"Canary"/"Done" (if it carries a flag, from that flag's production
