@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+(none)
+
+## [0.1.5] — 2026-08-27
+
 - Ticket-wide rollout label is now environment-qualified and 3-state:
   `posthog-VALUE:dark`/`:custom`/`:live` replaces the unqualified `posthog-live`/`posthog-dark`
   pair, which a real preview-only cron (discovered auditing a live Linear board) was writing onto
