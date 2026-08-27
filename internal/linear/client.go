@@ -266,6 +266,131 @@ func (c *Client) RemoveLabel(issueID, labelID string) error {
 	return nil
 }
 
+const issuesByStateQuery = `
+query($stateName: String!, $after: String) {
+  issues(filter: {state: {name: {eq: $stateName}}}, first: 100, after: $after) {
+    nodes {
+      id
+      identifier
+      team { id }
+      releases { nodes { stage { type } } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+
+type issuesByStateResponse struct {
+	Issues struct {
+		Nodes []struct {
+			ID         string `json:"id"`
+			Identifier string `json:"identifier"`
+			Team       struct {
+				ID string `json:"id"`
+			} `json:"team"`
+			Releases struct {
+				Nodes []struct {
+					Stage struct {
+						Type string `json:"type"`
+					} `json:"stage"`
+				} `json:"nodes"`
+			} `json:"releases"`
+		} `json:"nodes"`
+		PageInfo struct {
+			HasNextPage bool   `json:"hasNextPage"`
+			EndCursor   string `json:"endCursor"`
+		} `json:"pageInfo"`
+	} `json:"issues"`
+}
+
+// ListIssuesByState finds every issue currently in the named workflow state
+// (e.g. "Merged"), across every team — the discovery primitive trig's
+// release-promotion sweep needs, which is a much wider population than
+// GetIssueByIdentifier's single-ticket lookup: most Merged tickets carry no
+// PostHog flag at all, so they're invisible to the flag-tag-driven
+// discovery the rest of sweep already does. Fully paginated, same
+// convention as posthog.Client.ListFlags.
+func (c *Client) ListIssuesByState(stateName string) ([]IssueByState, error) {
+	var all []IssueByState
+	var after *string
+	for {
+		var resp issuesByStateResponse
+		vars := map[string]interface{}{"stateName": stateName, "after": after}
+		if err := c.do(issuesByStateQuery, vars, &resp); err != nil {
+			return nil, err
+		}
+		for _, n := range resp.Issues.Nodes {
+			released := false
+			for _, r := range n.Releases.Nodes {
+				if r.Stage.Type == "completed" {
+					released = true
+					break
+				}
+			}
+			all = append(all, IssueByState{
+				ID:               n.ID,
+				Identifier:       n.Identifier,
+				TeamID:           n.Team.ID,
+				ReleaseCompleted: released,
+			})
+		}
+		if !resp.Issues.PageInfo.HasNextPage {
+			break
+		}
+		cursor := resp.Issues.PageInfo.EndCursor
+		after = &cursor
+	}
+	return all, nil
+}
+
+const workflowStateByNameQuery = `
+query($teamID: String!, $name: String!) {
+  workflowStates(filter: {team: {id: {eq: $teamID}}, name: {eq: $name}}) {
+    nodes { id name }
+  }
+}`
+
+// GetWorkflowStateByName finds teamID's workflow state named name (e.g.
+// "Dark"). States are team-scoped in Linear — there's no workspace-level
+// state — so every lookup needs the issue's own team. Unlike
+// GetLabelByName's pairing with CreateLabel, there is no create-on-missing
+// here: these states are expected to already exist (a human configured the
+// team's workflow), and inventing one via API on a miss would be a far
+// bigger, more surprising side effect than a label.
+func (c *Client) GetWorkflowStateByName(teamID, name string) (*WorkflowState, error) {
+	var resp struct {
+		WorkflowStates struct {
+			Nodes []WorkflowState `json:"nodes"`
+		} `json:"workflowStates"`
+	}
+	if err := c.do(workflowStateByNameQuery, map[string]interface{}{"teamID": teamID, "name": name}, &resp); err != nil {
+		return nil, err
+	}
+	if len(resp.WorkflowStates.Nodes) == 0 {
+		return nil, &NotFoundError{Message: fmt.Sprintf("no workflow state named %q on team %s", name, teamID)}
+	}
+	return &resp.WorkflowStates.Nodes[0], nil
+}
+
+const setStateMutation = `
+mutation($issueID: String!, $stateID: String!) {
+  issueUpdate(id: $issueID, input: {stateId: $stateID}) {
+    success
+  }
+}`
+
+// SetState moves issueID to workflow state stateID — e.g. promoting a
+// Merged ticket to Dark/Canary/Done once its code has actually released.
+func (c *Client) SetState(issueID, stateID string) error {
+	var resp issueUpdateResponse
+	if err := c.do(setStateMutation, map[string]interface{}{"issueID": issueID, "stateID": stateID}, &resp); err != nil {
+		return err
+	}
+	if !resp.IssueUpdate.Success {
+		return fmt.Errorf("issueUpdate reported failure for issue %s", issueID)
+	}
+	return nil
+}
+
 const attachmentCreateMutation = `
 mutation($issueID: String!, $title: String!, $subtitle: String, $url: String!, $metadata: JSONObject) {
   attachmentCreate(input: {issueId: $issueID, title: $title, subtitle: $subtitle, url: $url, metadata: $metadata}) {

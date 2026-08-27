@@ -37,7 +37,23 @@ is the signature of tracking the wrong environment, not of nothing having
 shipped yet — this is the check that would have caught a cron pinned to
 --env preview well before anyone happened to notice by hand.
 
-  --env VALUE   Same as trig status --env. Default: production.
+Separately, and regardless of --env: for every Linear ticket currently at
+state "Merged", sweep checks (via the Linear Release API) whether its code
+has actually reached a completed release. If not, the ticket is left alone,
+no-op. If so, and it carries no PostHog flag, it moves straight to "Done" —
+nothing gates it once it's on main. If it carries a flag, it moves to
+"Dark"/"Canary"/"Done" from that flag's production rollout state (always
+production, independent of --env above) — Done only when every matched flag
+is live, so a ticket carrying one flag deliberately left at a permanent
+partial rollout never gets force-closed by a sibling flag going live. This
+part of sweep is what closes the gap Linear's own git-merge automations
+can't: PR-opened -> "In Review" and PR-merged -> "Merged" are automated by
+Linear directly, but nothing past "Merged" can be, since that requires
+branching per-issue on whether it's flag-gated.
+
+  --env VALUE   Same as trig status --env. Only affects the rollout-label
+                pass above, not the Merged-ticket state promotion, which is
+                always production.
   --json        Print one JSON document (a list of per-ticket reports) to
                 stdout instead of prose.
   --dry-run     Print what would change; make no Linear writes at all.
@@ -59,6 +75,7 @@ type sweepOutput struct {
 	CheckedAt   string              `json:"checked_at"`
 	Tickets     []sweepTicketResult `json:"tickets"`
 	VoidWarning string              `json:"void_warning,omitempty"`
+	Promotions  []promotionResult   `json:"promotions"`
 }
 
 // voidWarning reports when every one of states (the ticket-wide state from
@@ -142,10 +159,35 @@ func cmdSweep(args []string) {
 		fmt.Println(warning)
 	}
 
+	promotions, promoFailed, err := promoteMergedTickets(lnClient, byTicket, dryRun, jsonOut)
+	if err != nil {
+		var lnAuth *linear.AuthError
+		if errors.As(err, &lnAuth) {
+			fmt.Fprintf(os.Stderr, "trig sweep: aborting — %v\n", err)
+			os.Exit(exitAuth)
+		}
+		fail("sweep", err)
+	}
+	failedCount += promoFailed
+
+	if !jsonOut && len(promotions) > 0 {
+		moved, pending := 0, 0
+		for _, p := range promotions {
+			switch {
+			case p.Error != "":
+			case p.Released:
+				moved++
+			default:
+				pending++
+			}
+		}
+		fmt.Printf("===\n%s: %d moved, %d awaiting release, %d failed\n", mergedStateName, moved, pending, promoFailed)
+	}
+
 	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		out := sweepOutput{Env: envValue, DryRun: dryRun, CheckedAt: checkedAt, Tickets: results, VoidWarning: warning}
+		out := sweepOutput{Env: envValue, DryRun: dryRun, CheckedAt: checkedAt, Tickets: results, VoidWarning: warning, Promotions: promotions}
 		if err := enc.Encode(out); err != nil {
 			fail("sweep", err)
 		}

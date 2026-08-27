@@ -16,6 +16,26 @@ type IssueLabel struct {
 	Name string `json:"name"`
 }
 
+// WorkflowState is a Linear issue status (e.g. "Merged", "Dark", "Canary",
+// "Done") — always scoped to one team; Linear has no workspace-level state.
+type WorkflowState struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// IssueByState is the subset of an issue trig's release-promotion sweep
+// needs when discovering every ticket at one workflow state (e.g.
+// "Merged"): enough to resolve its team's other states (TeamID) and
+// whether its code has actually reached a completed release
+// (ReleaseCompleted, derived here from the raw releases connection so
+// callers don't re-walk it themselves).
+type IssueByState struct {
+	ID               string
+	Identifier       string
+	TeamID           string
+	ReleaseCompleted bool
+}
+
 type Attachment struct {
 	ID       string                 `json:"id"`
 	Title    string                 `json:"title"`

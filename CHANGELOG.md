@@ -2,7 +2,19 @@
 
 ## Unreleased
 
-(none)
+- `trig sweep` gains a second, independent responsibility: every Linear ticket at state "Merged"
+  gets checked against the Linear Release API, and once its code has actually reached a completed
+  release, gets moved to "Dark"/"Canary"/"Done" (if it carries a flag, from that flag's production
+  rollout state) or straight to "Done" (if it carries none). This is the half of aipotluck.org's new
+  5-state ticket lifecycle Linear's own git-merge automations can't own, since they can't
+  conditionally branch per-issue on whether a ticket is flag-gated. Done requires every matched flag
+  to be live, not any — deliberately stricter than the ticket-wide label's any-live-wins rule, so a
+  ticket carrying a flag intentionally parked below 100% forever (CUR-92) never gets force-closed by
+  an unrelated sibling flag going live. New Linear API surface: `issues(filter: {state:...})` for
+  Merged-ticket discovery (paginated), `workflowStates(filter: {team:..., name:...})` to resolve a
+  state name to an ID, `Issue.releases`/`Release.stage.type` for the release check, and `stateId` on
+  the existing `issueUpdate` mutation for the actual write — all confirmed against Linear's own live
+  GraphQL schema, not assumed.
 
 ## [0.1.5] — 2026-08-27
 

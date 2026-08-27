@@ -34,6 +34,13 @@ to the wrong environment, not of nothing having shipped. Meant to run unattended
 `DESIGN.md`'s "Trigger model" section for the credential and workflow file that lives in the
 consuming project's own repo.
 
+`sweep` also owns the part of a ticket's lifecycle Linear's own git-merge automations can't: every
+ticket at state "Merged" gets checked against the Linear Release API, and once its code has actually
+reached a completed release, moved to "Dark"/"Canary"/"Done" (flagged) or straight to "Done"
+(unflagged) — always against production, regardless of `--env`. See `DESIGN.md`'s "Ticket lifecycle:
+Merged → released" section for the full state machine and why a permanently-partial rollout never
+gets force-closed.
+
 `trig reconcile FILE [--json]` catches the other direction of the same lie: a flag key declared in
 application code, shipped, tests green, that nobody ever actually created in PostHog. Feed it a
 JSON array of `{"key","ticket"}` — a file path or `-` for stdin — and it names every entry with no

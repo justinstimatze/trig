@@ -88,6 +88,42 @@ answer, computed only from `RolloutSummary`/`StateIn`'s existing literal reading
 release conditions — no new interpretation, no new PostHog surface, just a label that finally
 names which environment it's talking about.
 
+**Ticket lifecycle: Merged → released** — aipotluck.org settled on a 5-state Linear ticket
+lifecycle to close the same "what does Done mean" ambiguity from the other direction: `In Review ->
+Merged -> Dark -> Canary -> Done`. Linear's own git-merge automations own exactly the first two
+transitions (`PR-opened -> In Review`, `PR-merged-to-develop -> Merged`) — everything past `Merged`
+has to be owned by trig, because Linear's release-completion automation can't conditionally branch
+per-issue on whether a ticket carries `posthog-flag`, and that branch is exactly what's needed, so
+that automation is deliberately left off rather than misused.
+
+For every ticket at state `Merged`, `trig sweep` checks (via `Issue.releases` in Linear's Release
+API — `Release.stage.type == "completed"`) whether its code has actually reached a completed
+release on `main`, via aipotluck.org's own `linear-release-action`-driven pipeline. Not yet: left
+alone, no-op — engineering finished the PR, the release pipeline hasn't confirmed it's on `main`
+yet. Confirmed: no flag means nothing gates it, straight to `Done`; a flag means `Dark`/`Canary`/
+`Done` from that flag's *production* rollout state specifically — always production, independent of
+whatever `--env` the rest of that sweep run was checking, since a ticket's real lifecycle state is
+answering "is this real for users," which only production release data can say.
+
+`Done` requires every matched flag to be live, not any — the opposite rule from the ticket-wide
+label's `aggregateState` (any-live-wins). That rule is fine for a label (harmless to overstate,
+freely re-computed every run) but was going to force-close a ticket carrying more than one flag,
+where one is intentionally parked below 100% forever (CUR-92's own ticket text: turning that flag on
+in prod is "Justin's call to make deliberately, not something that should go live as a side
+effect") and a sibling flag on the same ticket happens to go live. Once a ticket leaves `Merged`
+this logic never revisits it — CUR-92 lands at `Canary` and stays there regardless of what its flag
+does afterward, with no heuristic needed to detect that it's meant to be permanent; the state machine
+being forward-only-from-`Merged` handles it for free.
+
+Considered and rejected: a sixth state, `Released`, after `Done`. Under this mapping `Done` already
+*is* released on both branches — unflagged, `main` is what aipotluck.org's continuous pipeline
+deploys from, so merged and released are the same event; flagged, `live` means 100% unconditional
+rollout, which is the definition of released, not an approximation of it. A `Released` state would
+need a signal true after `Done` but not at the moment `Done` becomes true, and neither PostHog nor
+Linear's release data expose one. The only real candidate — GTM/comms announcement timing — isn't
+observable from anything trig reads, so automating a transition into it isn't possible, and setting
+it by hand reintroduces the exact ambiguity this lifecycle exists to remove.
+
 **CLI** — `trig link TICKET-ID FLAG-KEY` / `trig unlink` manage the tag. `trig status TICKET-ID
 [--env V] [--json] [--dry-run]` is the main command. `trig sweep [--env V] [--json] [--dry-run]` is
 the same report run against every ticket with a linked flag instead of one named on the command
@@ -145,5 +181,15 @@ finer-grained scoping.
   .../feature_flags/{id}/`. `Authorization: Bearer {key}`.
 - **Linear**: GraphQL, single endpoint `https://api.linear.app/graphql`, `Authorization: {key}` (no
   `Bearer` prefix). `issue(id:)` accepts the human-readable identifier (`CUR-515`) directly. Key
-  mutations: `issueUpdate` (labels), `attachmentCreate`/`attachmentUpdate` (the report), rollout
-  state lives in `metadata` (a `JSONObject`), only the `title` is rendered in Linear's UI.
+  mutations: `issueUpdate` (labels, and — via its `stateId` field — the Merged-ticket lifecycle
+  promotion), `attachmentCreate`/`attachmentUpdate` (the report), rollout state lives in `metadata`
+  (a `JSONObject`), only the `title` is rendered in Linear's UI. `issues(filter: {state: {name:
+  {eq:...}}})` is sweep's Merged-ticket discovery query (paginated via `pageInfo`/`after`, same
+  convention as `posthog.Client.ListFlags`) — a materially wider read than `issue(id:)`'s
+  single-ticket lookup, since it has to find every Merged ticket workspace-wide, not just ones
+  already known to carry a flag. `workflowStates(filter: {team: {id:...}, name: {eq:...}})` resolves
+  a state name to an ID — team-scoped, since Linear has no workspace-level state, so this needs the
+  issue's own `team.id`. `Issue.releases` (a direct connection, no join through `issueToReleases`
+  needed) with `Release.stage.type == "completed"` is the release-confirmation check. Every field and
+  input name here was confirmed live against Linear's own GraphQL introspection
+  (`api.linear.app/graphql` answers named-type introspection with no key required), not assumed.

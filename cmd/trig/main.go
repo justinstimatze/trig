@@ -99,7 +99,10 @@ Usage:
                                    create-or-update attachment per flag.
   trig sweep [--env V]             Find every ticket with a linked flag on its
                                    own (no ticket named) and run status for
-                                   each. Meant for a schedule, not by hand.
+                                   each. Also moves every ticket at Linear
+                                   state "Merged" to Dark/Canary/Done once its
+                                   release is confirmed. Meant for a schedule,
+                                   not by hand.
   trig flags [SEARCH]             List PostHog flags and their tags (read-only) —
                                    use this to find a FLAG-KEY for link/unlink.
   trig reconcile FILE [--json]    Diff a JSON flag registry ([{"key","ticket"}],
