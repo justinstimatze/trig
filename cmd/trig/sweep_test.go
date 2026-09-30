@@ -42,11 +42,12 @@ func TestGroupByTicket(t *testing.T) {
 
 func TestParseSweepArgs(t *testing.T) {
 	cases := []struct {
-		name       string
-		args       []string
-		wantEnv    string
-		wantJSON   bool
-		wantDryRun bool
+		name              string
+		args              []string
+		wantEnv           string
+		wantJSON          bool
+		wantDryRun        bool
+		wantPromoteDryRun bool
 	}{
 		{
 			name:    "defaults",
@@ -65,14 +66,20 @@ func TestParseSweepArgs(t *testing.T) {
 			wantJSON:   true,
 			wantDryRun: true,
 		},
+		{
+			name:              "promote-dry-run leaves the label pass writing",
+			args:              []string{"--promote-dry-run"},
+			wantEnv:           "production",
+			wantPromoteDryRun: true,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			env, jsonOut, dryRun := parseSweepArgs(tc.args)
-			if env != tc.wantEnv || jsonOut != tc.wantJSON || dryRun != tc.wantDryRun {
-				t.Errorf("parseSweepArgs(%v) = (%q, %v, %v), want (%q, %v, %v)",
-					tc.args, env, jsonOut, dryRun, tc.wantEnv, tc.wantJSON, tc.wantDryRun)
+			env, jsonOut, dryRun, promoteDryRun := parseSweepArgs(tc.args)
+			if env != tc.wantEnv || jsonOut != tc.wantJSON || dryRun != tc.wantDryRun || promoteDryRun != tc.wantPromoteDryRun {
+				t.Errorf("parseSweepArgs(%v) = (%q, %v, %v, %v), want (%q, %v, %v, %v)",
+					tc.args, env, jsonOut, dryRun, promoteDryRun, tc.wantEnv, tc.wantJSON, tc.wantDryRun, tc.wantPromoteDryRun)
 			}
 		})
 	}

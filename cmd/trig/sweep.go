@@ -14,7 +14,7 @@ import (
 	"github.com/justinstimatze/trig/internal/posthog"
 )
 
-const sweepUsage = `usage: trig sweep [--env VALUE] [--json] [--dry-run]
+const sweepUsage = `usage: trig sweep [--env VALUE] [--json] [--dry-run] [--promote-dry-run]
 
 Finds every PostHog flag tagged linear:TICKET-ID — for any ticket, not one
 named on the command line — groups them by ticket, and runs the same report
@@ -57,6 +57,10 @@ branching per-issue on whether it's flag-gated.
   --json        Print one JSON document (a list of per-ticket reports) to
                 stdout instead of prose.
   --dry-run     Print what would change; make no Linear writes at all.
+  --promote-dry-run
+                Run the rollout-label pass for real, but only report the
+                Merged-ticket state moves it would make. For a workspace whose
+                releases complete before its tickets are done.
 
 Exit codes: 0 every ticket succeeded, 6 partial failure (at least one
 ticket failed, others may have succeeded), 4 API key unauthorized/missing
@@ -99,7 +103,7 @@ func voidWarning(states []posthog.RolloutState, envValue string) string {
 // being told which ticket to check, it finds every ticket with a linked
 // flag on its own. See sweepUsage for the full contract.
 func cmdSweep(args []string) {
-	envValue, jsonOut, dryRun := parseSweepArgs(args)
+	envValue, jsonOut, dryRun, promoteDryRun := parseSweepArgs(args)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -159,7 +163,7 @@ func cmdSweep(args []string) {
 		fmt.Println(warning)
 	}
 
-	promotions, promoFailed, err := promoteMergedTickets(lnClient, byTicket, dryRun, jsonOut)
+	promotions, promoFailed, err := promoteMergedTickets(lnClient, byTicket, dryRun || promoteDryRun, jsonOut)
 	if err != nil {
 		var lnAuth *linear.AuthError
 		if errors.As(err, &lnAuth) {
@@ -226,7 +230,7 @@ func groupByTicket(flags []posthog.FeatureFlag) map[string][]posthog.FeatureFlag
 	return byTicket
 }
 
-func parseSweepArgs(args []string) (envValue string, jsonOut, dryRun bool) {
+func parseSweepArgs(args []string) (envValue string, jsonOut, dryRun, promoteDryRun bool) {
 	envValue = "production"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -244,10 +248,12 @@ func parseSweepArgs(args []string) (envValue string, jsonOut, dryRun bool) {
 			jsonOut = true
 		case "--dry-run":
 			dryRun = true
+		case "--promote-dry-run":
+			promoteDryRun = true
 		default:
 			fmt.Fprintf(os.Stderr, "trig sweep: unexpected argument %q\n\n%s", args[i], sweepUsage)
 			os.Exit(exitUsage)
 		}
 	}
-	return envValue, jsonOut, dryRun
+	return envValue, jsonOut, dryRun, promoteDryRun
 }
