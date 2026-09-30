@@ -343,7 +343,7 @@ func (c *Client) ListIssuesByState(stateName string) ([]IssueByState, error) {
 }
 
 const workflowStateByNameQuery = `
-query($teamID: String!, $name: String!) {
+query($teamID: ID!, $name: String!) {
   workflowStates(filter: {team: {id: {eq: $teamID}}, name: {eq: $name}}) {
     nodes { id name }
   }
