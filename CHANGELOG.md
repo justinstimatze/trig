@@ -4,6 +4,12 @@
 
 (none)
 
+## [0.1.8] — 2026-09-30
+
+- `trig sweep --promote-dry-run`: the rollout-label pass writes as before; the Merged-ticket
+  promotion only prints what it would move. For a workspace whose Linear releases complete before the
+  tickets in them are done.
+
 ## [0.1.7] — 2026-09-30
 
 - Fix: the workflow-state-by-name lookup declared `$teamID` as `String!`, but Linear's team id
