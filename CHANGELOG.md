@@ -4,6 +4,13 @@
 
 (none)
 
+## [0.1.7] — 2026-09-30
+
+- Fix: the workflow-state-by-name lookup declared `$teamID` as `String!`, but Linear's team id
+  comparator expects `ID`, so every move to Dark/Canary/Done failed with a 400 and `trig sweep` exited
+  6 on the first released ticket. The 0.1.6 note below says this surface was confirmed against the
+  live schema; this query was not. Now declared `ID!`, checked by a live query.
+
 ## [0.1.6] — 2026-08-27
 
 - `trig sweep` gains a second, independent responsibility: every Linear ticket at state "Merged"
