@@ -260,3 +260,41 @@ func TestTruncateUTF8_DoesNotSplitAMultiByteRune(t *testing.T) {
 		t.Errorf("truncateUTF8() = %q, want the split rune dropped entirely", got)
 	}
 }
+
+// A sweep failed outright when one Linear query timed out; a query now gets two more attempts.
+func TestDo_QueryRetriesATransientFailure(t *testing.T) {
+	hits := 0
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{}})
+	})
+	c.reads = newReadClient()
+
+	if err := c.do("query { viewer { id } }", nil, nil); err != nil {
+		t.Fatalf("do() error = %v, want success on the retry", err)
+	}
+	if hits != 2 {
+		t.Fatalf("server saw %d requests, want 2", hits)
+	}
+}
+
+// A mutation Linear may already have applied is never sent twice.
+func TestDo_MutationIsNotRetried(t *testing.T) {
+	hits := 0
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	c.reads = newReadClient()
+
+	if err := c.do("mutation { issueLabelCreate(input: {}) { success } }", nil, nil); err == nil {
+		t.Fatal("do() succeeded, want the 503")
+	}
+	if hits != 1 {
+		t.Fatalf("server saw %d requests, want 1", hits)
+	}
+}

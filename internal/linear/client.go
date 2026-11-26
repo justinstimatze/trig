@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/justinstimatze/trig/internal/config"
 )
 
@@ -23,14 +25,29 @@ var endpoint = "https://api.linear.app/graphql"
 
 type Client struct {
 	apiKey string
-	http   *http.Client
+	http   *http.Client // mutations: one attempt, since a write Linear applied before timing out must not repeat
+	reads  *http.Client // queries: retried; nil means use http
 }
 
 func NewClient(cfg *config.Config) *Client {
 	return &Client{
 		apiKey: cfg.LinearAPIKey,
 		http:   &http.Client{Timeout: 30 * time.Second},
+		reads:  newReadClient(),
 	}
+}
+
+// newReadClient retries a query that timed out or got a 429 or 5xx, twice, with backoff, so one slow
+// Linear response doesn't fail a whole sweep. Each attempt keeps the 30 s timeout. Only reads use it:
+// a mutation Linear applied before the response timed out (CreateLabel, say) would apply twice.
+func newReadClient() *http.Client {
+	rc := retryablehttp.NewClient()
+	rc.HTTPClient.Timeout = 30 * time.Second
+	rc.RetryMax = 2
+	rc.RetryWaitMin = time.Second
+	rc.RetryWaitMax = 5 * time.Second
+	rc.Logger = nil
+	return rc.StandardClient()
 }
 
 // AuthError means the API key is unauthorized or lacks a required
@@ -102,7 +119,11 @@ func (c *Client) do(query string, variables map[string]interface{}, out interfac
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", c.apiKey) // no "Bearer" prefix — Linear's own convention
 
-	resp, err := c.http.Do(req)
+	hc := c.http
+	if c.reads != nil && !strings.HasPrefix(strings.TrimSpace(query), "mutation") {
+		hc = c.reads
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}
